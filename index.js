@@ -7,111 +7,93 @@ dotenv.config();
 
 const API_KEY = process.env.OPENROUTER_API_KEY;
 
-// 🧠 CHAT HISTORY
-let history = [
-  {
-    role: "system",
-    content: `
-You are a coding assistant.
+// 🔥 AI CALL
+async function askAI(prompt) {
+  try {
+    const res = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        model: "openai/gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `
+You are an expert full-stack developer.
 
-Return ONLY JSON in this format:
+Return ONLY valid JSON in this format:
 
 {
   "folder": "project-name",
   "files": {
-    "index.html": "FULL HTML CODE",
-    "styles.css": "FULL CSS CODE",
-    "script.js": "FULL JS CODE"
+    "index.html": "...",
+    "styles.css": "...",
+    "script.js": "..."
   }
 }
 
 Rules:
-- Create or modify project
-- Always return full updated code
+- Only JSON
 - No explanation
+- Full working code
 `
-  }
-];
-
-// 🤖 AI CALL
-async function askAI(prompt) {
-  // add user input to history
-  history.push({
-    role: "user",
-    content: prompt
-  });
-
-  const res = await axios.post(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
-      model: "openai/gpt-4o-mini",
-      messages: history
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${API_KEY}`
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ]
+      },
+      {
+        headers: {
+          "Authorization": `Bearer ${API_KEY}`,
+          "Content-Type": "application/json"
+        }
       }
-    }
-  );
-
-  const reply = res.data.choices[0].message.content;
-
-  // add AI response to history
-  history.push({
-    role: "assistant",
-    content: reply
-  });
-
-  return reply;
-}
-
-// 🛠 CREATE / UPDATE FILES
-function createProject(data) {
-  // ⚠️ JSON safe extract
-  const jsonMatch = data.match(/\{[\s\S]*\}/);
-
-  if (!jsonMatch) {
-    console.log("❌ Invalid JSON from AI");
-    return;
-  }
-
-  const parsed = JSON.parse(jsonMatch[0]);
-
-  const folder = parsed.folder;
-
-  if (!fs.existsSync(folder)) {
-    fs.mkdirSync(folder);
-  }
-
-  for (let file in parsed.files) {
-    fs.writeFileSync(
-      `${folder}/${file}`,
-      parsed.files[file]
     );
-  }
 
-  console.log("\n✅ Project Updated!");
+    return res.data.choices[0].message.content;
+
+  } catch (err) {
+    console.log("❌ API Error:", err.response?.data || err.message);
+    return null;
+  }
 }
 
-// 🔁 LOOP
-while (true) {
-  const input = readlineSync.question("\n⚡ AI Dev > ");
-
-  if (input.toLowerCase() === "exit") break;
-
-  if (input.toLowerCase() === "reset") {
-    console.log("🔄 Memory Cleared");
-    history = [history[0]]; // keep system prompt
-    continue;
-  }
-
+// 📁 CREATE PROJECT
+function createProject(response) {
   try {
+    const parsed = JSON.parse(response);
+
+    const folder = parsed.folder;
+
+    if (!fs.existsSync(folder)) {
+      fs.mkdirSync(folder);
+    }
+
+    for (let file in parsed.files) {
+      fs.writeFileSync(`${folder}/${file}`, parsed.files[file]);
+    }
+
+    console.log(`\n✅ Project "${folder}" created successfully!\n`);
+
+  } catch (err) {
+    console.log("❌ JSON Parse Error:", err.message);
+  }
+}
+
+// 🚀 MAIN LOOP
+async function main() {
+  while (true) {
+    const input = readlineSync.question("🤖 AI Dev > ");
+
+    if (input.toLowerCase() === "exit") break;
+
     const response = await askAI(input);
 
-    console.log("\n🤖 AI Response received");
-
-    createProject(response);
-  } catch (err) {
-    console.log("❌ Error:", err.message);
+    if (response) {
+      createProject(response);
+    }
   }
 }
+
+main();
